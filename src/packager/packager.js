@@ -1,5 +1,5 @@
 import {EventTarget, CustomEvent} from '../common/event-target';
-import createChecksumWorker from '../build/p4-worker-loader!./sha256'
+import sha256 from './sha256';
 import escapeXML from '../common/escape-xml';
 import largeAssets from './large-assets';
 import request from '../common/request';
@@ -7,7 +7,9 @@ import pngToAppleICNS from './icns';
 import {buildId, verifyBuildId} from './build-id';
 import {encode, decode} from './base85';
 import {parsePlist, generatePlist} from './plist';
-import {APP_NAME, WEBSITE, COPYRIGHT_NOTICE} from './brand';
+import {APP_NAME, WEBSITE, COPYRIGHT_NOTICE, ACCENT_COLOR} from './brand';
+import {OutdatedPackagerError} from '../common/errors';
+import {Adapter} from './adapter';
 
 const PROGRESS_LOADED_SCRIPTS = 0.1;
 
@@ -27,14 +29,7 @@ const removeUnnecessaryEmptyLines = (string) => string.split('\n')
   })
   .join('\n');
 
-const sha256 = async (buffer) => {
-  const {worker, terminate} = createChecksumWorker();
-  const hash = await worker.sha256(buffer);
-  terminate();
-  return hash;
-};
-
-const getJSZip = async () => (await import(/* webpackChunkName: "jszip" */ 'jszip')).default;
+export const getJSZip = async () => (await import(/* webpackChunkName: "jszip" */ 'jszip')).default;
 
 const setFileFast = (zip, path, data) => {
   zip.files[path] = data;
@@ -116,6 +111,42 @@ const generateChromiumLicenseHTML = (licenses) => {
   return `${style}${pretext}${convertedLicenses.join('\n')}`;
 };
 
+// Unique identifier for the app. If this changes, things like local cloud variables will be lost.
+// This should be in reverse-DNS format.
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleidentifier
+const CFBundleIdentifier = 'CFBundleIdentifier';
+// Even if you fork the packager, you shouldn't change this string unless you want packaged macOS apps
+// to lose all their data.
+const bundleIdentifierPrefix = 'org.turbowarp.packager.userland.';
+
+// CFBundleName is displayed in the menu bar.
+// I'm not actually sure where CFBundleDisplayName is displayed.
+// Documentation says that CFBundleName is only supposed to be 15 characters and that CFBundleDisplayName
+// should be used for longer names, but in reality CFBundleName seems to not have a length limit.
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundlename
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundledisplayname
+const CFBundleName = 'CFBundleName';
+const CFBundleDisplayName = 'CFBundleDisplayName';
+
+// The name of the executable in the .app/Contents/MacOS folder
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleexecutable
+const CFBundleExecutable = 'CFBundleExecutable';
+
+// macOS's "About" screen will display: "Version {CFBundleShortVersionString} ({CFBundleVersion})"
+// Apple's own apps are inconsistent about what they display here. Some apps set both of these to the same thing
+// so you see eg. "Version 15.0 (15.0)" while others set CFBundleShortVersionString to a semver-like and
+// treat CFBundleVersion as a simple build number eg. "Version 1.4.0 (876)"
+// Apple's documentation says both of these are supposed to be major.minor.patch, but in reality it doesn't
+// even have to contain numbers and everything seems to work fine.
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleversion
+// https://developer.apple.com/documentation/bundleresources/information_property_list/cfbundleshortversionstring
+const CFBundleVersion = 'CFBundleVersion';
+const CFBundleShortVersionString = 'CFBundleShortVersionString';
+
+// Describes the category of the app
+// https://developer.apple.com/documentation/bundleresources/information_property_list/lsapplicationcategorytype
+const LSApplicationCategoryType = 'LSApplicationCategoryType';
+
 class Packager extends EventTarget {
   constructor () {
     super();
@@ -138,7 +169,7 @@ class Packager extends EventTarget {
     }
   }
 
-  async fetchLargeAsset (name) {
+  async fetchLargeAsset (name, type) {
     this.ensureNotAborted();
     const asset = largeAssets[name];
     if (!asset) {
@@ -157,7 +188,7 @@ class Packager extends EventTarget {
     let result;
     let cameFromCache = false;
     try {
-      const cached = await Packager.adapter.getCachedAsset(asset);
+      const cached = await Adapter.getCachedAsset(asset);
       if (cached) {
         result = cached;
         cameFromCache = true;
@@ -173,7 +204,7 @@ class Packager extends EventTarget {
       }
       result = await request({
         url,
-        type: asset.type,
+        type,
         estimatedSize: asset.estimatedSize,
         progressCallback: (progress) => {
           dispatchProgress(progress);
@@ -182,7 +213,7 @@ class Packager extends EventTarget {
       });
     }
     if (asset.useBuildId && !verifyBuildId(buildId, result)) {
-      throw new Error('Build ID mismatch; This should be fixed after refreshing the page.');
+      throw new OutdatedPackagerError('Build ID does not match.');
     }
     if (asset.sha256) {
       const hash = await sha256(result);
@@ -192,7 +223,7 @@ class Packager extends EventTarget {
     }
     if (!cameFromCache) {
       try {
-        await Packager.adapter.cacheAsset(asset, result);
+        await Adapter.cacheAsset(asset, result);
       } catch (e) {
         console.warn(e);
       }
@@ -205,6 +236,7 @@ class Packager extends EventTarget {
     return {
       ...this.options.chunks,
       specialCloudBehaviors: this.options.cloudVariables.specialCloudBehaviors,
+      unsafeCloudBehaviors: this.options.cloudVariables.unsafeCloudBehaviors,
       pause: this.options.controls.pause.enabled
     };
   }
@@ -212,12 +244,12 @@ class Packager extends EventTarget {
   async loadResources () {
     const texts = [COPYRIGHT_HEADER];
     if (this.project.analysis.usesMusic) {
-      texts.push(await this.fetchLargeAsset('scaffolding'));
+      texts.push(await this.fetchLargeAsset('scaffolding', 'text'));
     } else {
-      texts.push(await this.fetchLargeAsset('scaffolding-min'));
+      texts.push(await this.fetchLargeAsset('scaffolding-min', 'text'));
     }
     if (Object.values(this.getAddonOptions()).some((i) => i)) {
-      texts.push(await this.fetchLargeAsset('addons'));
+      texts.push(await this.fetchLargeAsset('addons', 'text'));
     }
     this.script = texts.join('\n').replace(/<\/script>/g,"</scri'+'pt>");
   }
@@ -235,8 +267,35 @@ class Packager extends EventTarget {
     return {width, height};
   }
 
+  getPlistPropertiesForPrimaryExecutable () {
+    return {
+      [CFBundleIdentifier]: `${bundleIdentifierPrefix}${this.options.app.packageName}`,
+
+      // For simplicity, we'll set these to the same thing
+      [CFBundleName]: this.options.app.windowTitle,
+      [CFBundleDisplayName]: this.options.app.windowTitle,
+
+      // We do rename the executable
+      [CFBundleExecutable]: this.options.app.packageName,
+
+      // For simplicity, we'll set these to the same thing
+      [CFBundleVersion]: this.options.app.version,
+      [CFBundleShortVersionString]: this.options.app.version,
+
+      // Most items generated by the packager are games
+      [LSApplicationCategoryType]: 'public.app-category.games'
+    };
+  }
+
+  async updatePlist (zip, name, newProperties) {
+    const contents = await zip.file(name).async('string');
+    const plist = parsePlist(contents);
+    Object.assign(plist, newProperties);
+    zip.file(name, generatePlist(plist));
+  }
+
   async addNwJS (projectZip) {
-    const nwjsBuffer = await this.fetchLargeAsset(this.options.target);
+    const nwjsBuffer = await this.fetchLargeAsset(this.options.target, 'arraybuffer');
     const nwjsZip = await (await getJSZip()).loadAsync(nwjsBuffer);
 
     const isWindows = this.options.target.startsWith('nwjs-win');
@@ -289,10 +348,11 @@ class Packager extends EventTarget {
     }
 
     const ICON_NAME = 'icon.png';
-    const icon = await Packager.adapter.getAppIcon(this.options.app.icon);
+    const icon = await Adapter.getAppIcon(this.options.app.icon);
     const manifest = {
       name: packageName,
       main: 'main.js',
+      version: this.options.app.version,
       window: {
         width: this.computeWindowSize().width,
         height: this.computeWindowSize().height,
@@ -342,62 +402,112 @@ cd "$(dirname "$0")"
   }
 
   async addElectron (projectZip) {
-    const buffer = await this.fetchLargeAsset(this.options.target);
+    const buffer = await this.fetchLargeAsset(this.options.target, 'arraybuffer');
     const electronZip = await (await getJSZip()).loadAsync(buffer);
 
     const isWindows = this.options.target.includes('win');
+    const isMac = this.options.target.includes('mac');
     const isLinux = this.options.target.includes('linux');
+
+    // See https://www.electronjs.org/docs/latest/tutorial/application-distribution#manual-distribution
 
     // Electron Windows/Linux folder structure:
     // * (root)
     // +-- electron.exe (executable)
-    // +-- LICENSES.chromium.html
-    // +-- ...
+    // +-- resources
+    //    +-- default_app.asar (we will delete this)
+    //    +-- app (we will create this)
+    //      +-- index.html and the other project files (we will create this)
+    // +-- LICENSES.chromium.html and everything else
+
+    // Electron macOS folder structure:
+    // * (root)
+    // +-- Electron.app
+    //    +-- Contents
+    //      +-- Info.plist (we must update)
+    //      +-- MacOS
+    //        +-- Electron (executable)
+    //      +-- Frameworks
+    //        +-- Electron Helper.app
+    //          +-- Contents
+    //            +-- Info.plist (we must update)
+    //        +-- Electron Helper (GPU).app
+    //          +-- Contents
+    //            +-- Info.plist (we must update)
+    //        +-- Electron Helper (Renderer).app
+    //          +-- Contents
+    //            +-- Info.plist (we must update)
+    //        +-- Electron Helper (Plugin).app
+    //          +-- Contents
+    //            +-- Info.plist (we must update)
+    //        +-- and several other helpers which we won't touch
+    //      +-- Resources
+    //        +-- default_app.asar (we will delete this)
+    //        +-- electron.icns (we will update this)
+    //        +-- app (we will create this)
+    //          +-- index.html and the other project files (we will create this)
+    // +-- LICENSES.chromium.html and other license files
 
     const zip = new (await getJSZip());
     const packageName = this.options.app.packageName;
     for (const path of Object.keys(electronZip.files)) {
       const file = electronZip.files[path];
-      // Create an inner folder inside the zip
-      let newPath = `${packageName}/${path}`;
-      // Rename the executable file
+
+      // On Windows and Linux, make an inner folder inside the zip. Zip extraction tools will sometimes make
+      // a mess if you don't make an inner folder.
+      // On macOS, the .app is already itself a folder already and macOS will always make a folder for the
+      // extracted files if there's multiple files at the root.
+      let newPath;
+      if (isMac) {
+        newPath = path;
+      } else {
+        newPath = `${packageName}/${path}`;
+      }
+
       if (isWindows) {
         newPath = newPath.replace('electron.exe', `${packageName}.exe`);
+      } else if (isMac) {
+        newPath = newPath.replace('Electron.app', `${packageName}.app`);
+        newPath = newPath.replace(/Electron$/, packageName);
       } else if (isLinux) {
         newPath = newPath.replace(/electron$/, packageName);
       }
+
       setFileFast(zip, newPath, file);
     }
 
-    const creditsHtml = await zip.file(`${packageName}/LICENSES.chromium.html`).async('string');
-    zip.file(`${packageName}/licenses.html`, creditsHtml + generateChromiumLicenseHTML([
+    const rootPrefix = isMac ? '' : `${packageName}/`;
+
+    const creditsHtml = await zip.file(`${rootPrefix}LICENSES.chromium.html`).async('string');
+    zip.file(`${rootPrefix}licenses.html`, creditsHtml + generateChromiumLicenseHTML([
       SELF_LICENSE,
       SCRATCH_LICENSE,
       ELECTRON_LICENSE
     ]));
 
-    zip.remove(`${packageName}/LICENSE.txt`);
-    zip.remove(`${packageName}/LICENSES.chromium.html`);
-    zip.remove(`${packageName}/LICENSE`);
-    zip.remove(`${packageName}/version`);
-    zip.remove(`${packageName}/resources/default_app.asar`);
+    zip.remove(`${rootPrefix}LICENSE.txt`);
+    zip.remove(`${rootPrefix}LICENSES.chromium.html`);
+    zip.remove(`${rootPrefix}LICENSE`);
+    zip.remove(`${rootPrefix}version`);
+    zip.remove(`${rootPrefix}resources/default_app.asar`);
 
-    const dataPrefix = `${packageName}/`;
-    const resourcePrefix = `${dataPrefix}resources/app/`;
+    const contentsPrefix = isMac ? `${rootPrefix}${packageName}.app/Contents/` : rootPrefix;
+    const resourcesPrefix = isMac ? `${contentsPrefix}Resources/app/` : `${contentsPrefix}resources/app/`;
     const electronMainName = 'electron-main.js';
     const iconName = 'icon.png';
 
-    const icon = await Packager.adapter.getAppIcon(this.options.app.icon);
-    zip.file(`${resourcePrefix}${iconName}`, icon);
+    const icon = await Adapter.getAppIcon(this.options.app.icon);
+    zip.file(`${resourcesPrefix}${iconName}`, icon);
 
     const manifest = {
       name: packageName,
-      main: electronMainName
+      main: electronMainName,
+      version: this.options.app.version
     };
-    zip.file(`${resourcePrefix}package.json`, JSON.stringify(manifest));
+    zip.file(`${resourcesPrefix}package.json`, JSON.stringify(manifest, null, 4));
 
     const mainJS = `'use strict';
-const {app, BrowserWindow, Menu, shell, screen} = require('electron');
+const {app, BrowserWindow, Menu, shell, screen, dialog} = require('electron');
 const path = require('path');
 
 const isWindows = process.platform === 'win32';
@@ -405,12 +515,10 @@ const isMac = process.platform === 'darwin';
 const isLinux = process.platform === 'linux';
 
 if (isMac) {
-  // TODO
   Menu.setApplicationMenu(Menu.buildFromTemplate([
     { role: 'appMenu' },
     { role: 'fileMenu' },
     { role: 'editMenu' },
-    { role: 'viewMenu' },
     { role: 'windowMenu' },
     { role: 'help' }
   ]));
@@ -418,7 +526,10 @@ if (isMac) {
   Menu.setApplicationMenu(null);
 }
 
-app.enableSandbox();
+const resourcesURL = Object.assign(new URL('file://'), {
+  pathname: path.join(__dirname, '/')
+}).href;
+const defaultProjectURL = new URL('./index.html', resourcesURL).href;
 
 const createWindow = (windowOptions) => {
   const options = {
@@ -426,6 +537,7 @@ const createWindow = (windowOptions) => {
     icon: path.resolve(__dirname, ${JSON.stringify(iconName)}),
     useContentSize: true,
     webPreferences: {
+      sandbox: true,
       contextIsolation: true,
       nodeIntegration: false,
     },
@@ -444,15 +556,26 @@ const createWindow = (windowOptions) => {
   return window;
 };
 
-const createProjectWindow = () => {
-  const window = createWindow({
+const createProjectWindow = (url) => {
+  const windowMode = ${JSON.stringify(this.options.app.windowMode)};
+  const options = {
+    show: false,
     backgroundColor: ${JSON.stringify(this.options.appearance.background)},
     width: ${this.computeWindowSize().width},
     height: ${this.computeWindowSize().height},
     minWidth: 50,
     minHeight: 50,
-  });
-  window.loadFile(path.resolve(__dirname, './index.html'));
+  };
+  // fullscreen === false disables fullscreen on macOS so only set this property when it's true
+  if (windowMode === 'fullscreen') {
+    options.fullscreen = true;
+  }
+  const window = createWindow(options);
+  if (windowMode === 'maximize') {
+    window.maximize();
+  }
+  window.loadURL(url);
+  window.show();
 };
 
 const createDataWindow = (dataURI) => {
@@ -460,10 +583,26 @@ const createDataWindow = (dataURI) => {
   window.loadURL(dataURI);
 };
 
+const isResourceURL = (url) => {
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.protocol === 'file:' && parsedUrl.href.startsWith(resourcesURL);
+  } catch (e) {
+    // ignore
+  }
+  return false;
+};
+
+const SAFE_PROTOCOLS = [
+  'https:',
+  'http:',
+  'mailto:',
+];
+
 const isSafeOpenExternal = (url) => {
   try {
     const parsedUrl = new URL(url);
-    return parsedUrl.protocol === 'https:' || parsedUrl.protocol === 'http:';
+    return SAFE_PROTOCOLS.includes(parsedUrl.protocol);
   } catch (e) {
     // ignore
   }
@@ -481,12 +620,31 @@ const isDataURL = (url) => {
 };
 
 const openLink = (url) => {
-  if (isSafeOpenExternal(url)) {
-    shell.openExternal(url);
-  } else if (isDataURL(url)) {
+  if (isDataURL(url)) {
     createDataWindow(url);
+  } else if (isResourceURL(url)) {
+    createProjectWindow(url);
+  } else if (isSafeOpenExternal(url)) {
+    shell.openExternal(url);
   }
 };
+
+app.on('render-process-gone', (event, webContents, details) => {
+  const window = BrowserWindow.fromWebContents(webContents);
+  dialog.showMessageBoxSync(window, {
+    type: 'error',
+    title: 'Error',
+    message: 'Renderer process crashed: ' + details.reason + ' (' + details.exitCode + ')'
+  });
+});
+
+app.on('child-process-gone', (event, details) => {
+  dialog.showMessageBoxSync({
+    type: 'error',
+    title: 'Error',
+    message: details.type + ' child process crashed: ' + details.reason + ' (' + details.exitCode + ')'
+  });
+});
 
 app.on('web-contents-created', (event, contents) => {
   contents.setWindowOpenHandler((details) => {
@@ -496,8 +654,19 @@ app.on('web-contents-created', (event, contents) => {
     return {action: 'deny'};
   });
   contents.on('will-navigate', (e, url) => {
-    e.preventDefault();
-    openLink(url);
+    if (!isResourceURL(url)) {
+      e.preventDefault();
+      openLink(url);
+    }
+  });
+  contents.on('before-input-event', (e, input) => {
+    const window = BrowserWindow.fromWebContents(contents);
+    if (!window || input.type !== "keyDown") return;
+    if (input.key === 'F11' || (input.key === 'Enter' && input.alt)) {
+      window.setFullScreen(!window.isFullScreen());
+    } else if (input.key === 'Escape' && window.isFullScreen()) {
+      window.setFullScreen(false);
+    }
   });
 });
 
@@ -506,29 +675,57 @@ app.on('window-all-closed', () => {
 });
 
 app.whenReady().then(() => {
-  createProjectWindow();
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-      createProjectWindow();
-    }
-  });
+  createProjectWindow(defaultProjectURL);
 });
 `;
-    zip.file(`${resourcePrefix}${electronMainName}`, mainJS);
+    zip.file(`${resourcesPrefix}${electronMainName}`, mainJS);
 
     for (const [path, data] of Object.entries(projectZip.files)) {
-      setFileFast(zip, `${resourcePrefix}${path}`, data);
+      setFileFast(zip, `${resourcesPrefix}${path}`, data);
     }
 
     if (isWindows) {
-      const readme = `Open "${packageName}.exe" to start the app. Open "licenses.html" for information regarding software licenses used by the app.`;
-      zip.file(`${dataPrefix}README.txt`, readme);
+      const readme = [
+        '1) Extract the whole zip',
+        `2) Open "${packageName}.exe" to start the app.`,
+        'Open "licenses.html" for information regarding open source software used by the app.',
+      ].join('\n\n');
+      zip.file(`${rootPrefix}README.txt`, readme);
+    } else if (isMac) {
+      const plist = this.getPlistPropertiesForPrimaryExecutable();
+      await this.updatePlist(zip, `${contentsPrefix}Info.plist`, plist);
+
+      // macOS Electron apps also contain several helper apps that we should update.
+      const HELPERS = [
+        'Electron Helper',
+        'Electron Helper (GPU)',
+        'Electron Helper (Renderer)',
+        'Electron Helper (Plugin)',
+      ];
+      for (const name of HELPERS) {
+        await this.updatePlist(zip, `${contentsPrefix}Frameworks/${name}.app/Contents/Info.plist`, {
+          // In the prebuilt Electron binaries on GitHub, the original app has a CFBundleIdentifier of
+          // com.github.Electron and all the helpers have com.github.Electron.helper
+          [CFBundleIdentifier]: `${plist[CFBundleIdentifier]}.helper`,
+
+          // We shouldn't change the actual name of the helpers because we don't actually rename their .app
+          // We also don't rename the executable
+          [CFBundleDisplayName]: name.replace('Electron', this.options.app.packageName),
+
+          // electron-builder always updates the helpers to use the same version as the app itself
+          [CFBundleVersion]: this.options.app.version,
+          [CFBundleShortVersionString]: this.options.app.version,
+        });
+      }
+
+      const icns = await pngToAppleICNS(icon);
+      zip.file(`${contentsPrefix}Resources/electron.icns`, icns);
     } else if (isLinux) {
       // Some Linux distributions can't easily open the executable file from the GUI, so we'll add a simple wrapper that people can use instead.
       const startScript = `#!/bin/bash
 cd "$(dirname "$0")"
 ./${packageName}`;
-      zip.file(`${dataPrefix}start.sh`, startScript, {
+      zip.file(`${rootPrefix}start.sh`, startScript, {
         unixPermissions: 0o100755
       });
     }
@@ -537,7 +734,7 @@ cd "$(dirname "$0")"
   }
 
   async addWebViewMac (projectZip) {
-    const buffer = await this.fetchLargeAsset(this.options.target);
+    const buffer = await this.fetchLargeAsset(this.options.target, 'arraybuffer');
     const appZip = await (await getJSZip()).loadAsync(buffer);
 
     // +-- WebView.app
@@ -552,7 +749,7 @@ cd "$(dirname "$0")"
 
     const newAppName = `${this.options.app.packageName}.app`;
     const contentsPrefix = `${newAppName}/Contents/`;
-    const resourcePrefix = `${newAppName}/Contents/Resources/`;
+    const resourcesPrefix = `${newAppName}/Contents/Resources/`;
 
     const zip = new (await getJSZip());
     for (const [path, data] of Object.entries(appZip.files)) {
@@ -564,13 +761,13 @@ cd "$(dirname "$0")"
       setFileFast(zip, newPath, data);
     }
     for (const [path, data] of Object.entries(projectZip.files)) {
-      setFileFast(zip, `${resourcePrefix}${path}`, data);
+      setFileFast(zip, `${resourcesPrefix}${path}`, data);
     }
 
-    const icon = await Packager.adapter.getAppIcon(this.options.app.icon);
+    const icon = await Adapter.getAppIcon(this.options.app.icon);
     const icns = await pngToAppleICNS(icon);
-    zip.file(`${resourcePrefix}AppIcon.icns`, icns);
-    zip.remove(`${resourcePrefix}Assets.car`);
+    zip.file(`${resourcesPrefix}AppIcon.icns`, icns);
+    zip.remove(`${resourcesPrefix}Assets.car`);
 
     const parsedBackgroundColor = parseInt(this.options.appearance.background.substr(1), 16);
     const applicationConfig = {
@@ -586,15 +783,9 @@ cd "$(dirname "$0")"
       width: this.computeWindowSize().width,
       height: this.computeWindowSize().height
     };
-    zip.file(`${resourcePrefix}application_config.json`, JSON.stringify(applicationConfig));
+    zip.file(`${resourcesPrefix}application_config.json`, JSON.stringify(applicationConfig));
 
-    const plist = parsePlist(await zip.file(`${contentsPrefix}Info.plist`).async('string'));
-    // If CFBundleIdentifier changes, then things like saved local cloud variables will be reset.
-    plist.CFBundleIdentifier = `org.turbowarp.packager.userland.${this.options.app.packageName}`;
-    plist.CFBundleName = this.options.app.windowTitle;
-    plist.CFBundleExecutable = this.options.app.packageName;
-    // TODO: update LSApplicationCategoryType
-    zip.file(`${contentsPrefix}Info.plist`, generatePlist(plist));
+    await this.updatePlist(zip, `${contentsPrefix}Info.plist`, this.getPlistPropertiesForPrimaryExecutable());
 
     return zip;
   }
@@ -734,7 +925,7 @@ cd "$(dirname "$0")"
     if (this.options.app.icon === null) {
       return '';
     }
-    const data = await Packager.adapter.readAsURL(this.options.app.icon, 'app icon');
+    const data = await Adapter.readAsURL(this.options.app.icon, 'app icon');
     return `<link rel="icon" href="${data}">`;
   }
 
@@ -743,15 +934,15 @@ cd "$(dirname "$0")"
       return this.options.cursor.type;
     }
     if (!this.options.cursor.custom) {
-      // Set to custom but no data, so ignore
+      // Configured to use a custom cursor but no image was selected
       return 'auto';
     }
-    const data = await Packager.adapter.readAsURL(this.options.cursor.custom, 'custom cursor');
-    return `url(${data}), auto`;
+    const data = await Adapter.readAsURL(this.options.cursor.custom, 'custom cursor');
+    return `url(${data}) ${this.options.cursor.center.x} ${this.options.cursor.center.y}, auto`;
   }
 
   async package () {
-    if (!Packager.adapter) {
+    if (!Adapter) {
       throw new Error('Missing adapter');
     }
     if (this.used) {
@@ -829,7 +1020,7 @@ cd "$(dirname "$0")"
     }
     #loading {
       ${this.options.loadingScreen.image && this.options.loadingScreen.imageMode === 'stretch'
-        ? `background-image: url(${await Packager.adapter.readAsURL(this.options.loadingScreen.image, 'stretched loading screen')});
+        ? `background-image: url(${await Adapter.readAsURL(this.options.loadingScreen.image, 'stretched loading screen')});
       background-repeat: no-repeat;
       background-size: contain;
       background-position: center;`
@@ -846,7 +1037,7 @@ cd "$(dirname "$0")"
       width: 0;
       background-color: currentColor;
     }
-    .loading-text {
+    .loading-text, noscript {
       font-weight: normal;
       font-size: 36px;
       margin: 0 0 16px;
@@ -900,14 +1091,15 @@ cd "$(dirname "$0")"
     .sc-canvas {
       cursor: ${await this.generateCursor()};
     }
+    .sc-monitor-root[opcode^="data_"] .sc-monitor-value-color {
+      background-color: ${this.options.monitors.variableColor};
+    }
     ${this.options.custom.css}
   </style>
   <meta name="theme-color" content="${this.options.appearance.background}">
   ${await this.generateFavicon()}
 </head>
 <body>
-  <noscript>Enable JavaScript</noscript>
-
   <div id="app"></div>
 
   <div id="launch" class="screen" hidden title="Click to start">
@@ -921,8 +1113,9 @@ cd "$(dirname "$0")"
   </div>
 
   <div id="loading" class="screen">
+    <noscript>Enable JavaScript</noscript>
     ${this.options.loadingScreen.text ? `<h1 class="loading-text">${escapeXML(this.options.loadingScreen.text)}</h1>` : ''}
-    ${this.options.loadingScreen.image && this.options.loadingScreen.imageMode === 'normal' ? `<div class="loading-image"><img src="${await Packager.adapter.readAsURL(this.options.loadingScreen.image, 'loading-screen')}"></div>` : ''}
+    ${this.options.loadingScreen.image && this.options.loadingScreen.imageMode === 'normal' ? `<div class="loading-image"><img src="${await Adapter.readAsURL(this.options.loadingScreen.image, 'loading-screen')}"></div>` : ''}
     ${this.options.loadingScreen.progressBar ? '<div class="progress-bar-outer"><div class="progress-bar-inner" id="loading-inner"></div></div>' : ''}
   </div>
 
@@ -969,9 +1162,16 @@ cd "$(dirname "$0")"
       scaffolding.setup();
       scaffolding.appendTo(appElement);
 
+      const vm = scaffolding.vm;
       window.scaffolding = scaffolding;
       window.vm = scaffolding.vm;
-      const vm = scaffolding.vm;
+      window.Scratch = {
+        vm,
+        renderer: vm.renderer,
+        audioEngine: vm.runtime.audioEngine,
+        bitmapAdapter: vm.runtime.v2BitmapAdapter,
+        videoProvider: vm.runtime.ioDevices.video.provider
+      };
 
       scaffolding.setUsername(${JSON.stringify(this.options.username)}.replace(/#/g, () => Math.floor(Math.random() * 10)));
       scaffolding.setAccentColor(${JSON.stringify(this.options.appearance.accent)});
@@ -1105,6 +1305,8 @@ cd "$(dirname "$0")"
         vm.extensionManager.loadExtensionURL(extension);
       }
 
+      ${this.options.closeWhenStopped ? `vm.runtime.on('PROJECT_RUN_STOP', () => window.close());` : ''}
+
       ${this.options.target.startsWith('nwjs-') ? `
       if (typeof nw !== 'undefined') {
         const win = nw.Window.get();
@@ -1122,23 +1324,17 @@ cd "$(dirname "$0")"
           }
         });
       }` : ''}
-
-      ${this.options.target.startsWith('electron-') ? `
-      document.addEventListener('keydown', (e) => {
-        if (e.key === 'F11' || (e.key === 'Enter' && e.altKey)) {
-          e.preventDefault();
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
-          } else {
-            document.body.requestFullscreen();
-          }
-        }
-      });` : ''}
     } catch (e) {
       handleError(e);
     }
   `)}</script>
-  <script>${this.options.custom.js}</script>
+  ${this.options.custom.js ? `<script>
+    try {
+      ${this.options.custom.js}
+    } catch (e) {
+      handleError(e);
+    }
+  </script>` : ''}
   ${await this.generateGetProjectData()}
   <script>
     const run = async () => {
@@ -1213,10 +1409,9 @@ cd "$(dirname "$0")"
   }
 }
 
-Packager.adapter = null;
-
 Packager.getDefaultPackageNameFromFileName = (title) => {
-  // Remove file extension
+  // Note: Changing this logic is very dangerous because changing the defaults will cause already packaged projects
+  // to loose any data when they are updated.
   title = title.split('.')[0];
   title = title.replace(/[^\-a-z ]/gi, '');
   title = title.trim();
@@ -1225,8 +1420,11 @@ Packager.getDefaultPackageNameFromFileName = (title) => {
 };
 
 Packager.getWindowTitleFromFileName = (title) => {
-  title = title.trim();
-  title = title.split('.')[0];
+  const split = title.split('.');
+  if (split.length > 1) {
+    split.pop();
+  }
+  title = split.join('.').trim();
   return title || 'Packaged Project';
 };
 
@@ -1243,6 +1441,7 @@ Packager.DEFAULT_OPTIONS = () => ({
   resizeMode: 'preserve-ratio',
   autoplay: false,
   username: 'player####',
+  closeWhenStopped: false,
   projectId: '',
   custom: {
     css: '',
@@ -1251,7 +1450,7 @@ Packager.DEFAULT_OPTIONS = () => ({
   appearance: {
     background: '#000000',
     foreground: '#ffffff',
-    accent: '#ff4c4c'
+    accent: ACCENT_COLOR
   },
   loadingScreen: {
     progressBar: true,
@@ -1274,7 +1473,8 @@ Packager.DEFAULT_OPTIONS = () => ({
     }
   },
   monitors: {
-    editableLists: false
+    editableLists: false,
+    variableColor: '#ff8c1a'
   },
   compiler: {
     enabled: true,
@@ -1284,7 +1484,9 @@ Packager.DEFAULT_OPTIONS = () => ({
   app: {
     icon: null,
     packageName: Packager.getDefaultPackageNameFromFileName(''),
-    windowTitle: Packager.getWindowTitleFromFileName('')
+    windowTitle: Packager.getWindowTitleFromFileName(''),
+    windowMode: 'window',
+    version: '1.0.0'
   },
   chunks: {
     gamepad: false,
@@ -1295,10 +1497,15 @@ Packager.DEFAULT_OPTIONS = () => ({
     cloudHost: 'wss://clouddata.turbowarp.org',
     custom: {},
     specialCloudBehaviors: false,
+    unsafeCloudBehaviors: false,
   },
   cursor: {
     type: 'auto',
-    custom: null
+    custom: null,
+    center: {
+      x: 0,
+      y: 0
+    }
   },
   extensions: []
 });

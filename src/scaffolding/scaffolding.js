@@ -11,6 +11,7 @@ import Cloud from './cloud';
 import Question from './question';
 import {ListMonitor, VariableMonitor} from './monitor';
 import ControlBar from './control-bar';
+import {isValidListValue, isValidVariableValue} from './verify-value';
 import defaultMessages from './messages.json';
 import styles from './style.css';
 
@@ -264,16 +265,14 @@ class Scaffolding extends EventTarget {
     const projectAreaHeight = Math.max(1, totalHeight - offsetFromTop - offsetFromBottom);
 
     if (this.resizeMode === 'dynamic-resize') {
-      this.width = projectAreaWidth;
-      this.height = projectAreaHeight;
-      this.renderer.setStageSize(
-        -this.width / 2,
-        this.width / 2,
-        -this.height / 2,
-        this.height / 2  
-      );
-      this.vm.runtime.stageWidth = this.width;
-      this.vm.runtime.stageHeight = this.height;  
+      // setStageSize is a TurboWarp-specific method
+      if (this.vm.setStageSize) {
+        this.width = projectAreaWidth;
+        this.height = projectAreaHeight;
+        this.vm.setStageSize(this.width, this.height);
+      } else {
+        console.warn('dynamic-resize not supported: vm does not implement setStageSize');
+      }
     }
 
     let width = projectAreaWidth;
@@ -315,15 +314,23 @@ class Scaffolding extends EventTarget {
     this.vm.on('PROJECT_RUN_STOP', () => this.dispatchEvent(new Event('PROJECT_RUN_STOP')));
 
     // TurboWarp-specific VM extensions
-    if (typeof this.vm.runtime.stageWidth === 'number') {
-      this.vm.runtime.stageWidth = this.width;
+    if (this.vm.convertToPackagedRuntime) {
+      this.vm.convertToPackagedRuntime();
     }
-    if (typeof this.vm.runtime.stageHeight === 'number') {
-      this.vm.runtime.stageHeight = this.height;
+    if (this.vm.setStageSize) {
+      this.vm.setStageSize(this.width, this.height);
     }
     if (this.vm.runtime.cloudOptions) {
       this.vm.runtime.cloudOptions.limit = Infinity;
     }
+    // TODO: remove when https://github.com/TurboWarp/packager/issues/213 is fixed
+    this.vm.on('STAGE_SIZE_CHANGED', (width, height) => {
+      if (this.width !== width || this.height !== height) {
+        this.width = width;
+        this.height = height;
+        this.relayout();
+      }
+    });
 
     this.cloudManager = new Cloud.CloudManager(this);
 
@@ -455,6 +462,34 @@ class Scaffolding extends EventTarget {
 
   stopAll () {
     this.vm.stopAll();
+  }
+
+  _lookupVariable(name, type) {
+    const variable = this.vm.runtime.getTargetForStage().lookupVariableByNameAndType(name, type);
+    if (!variable) throw new Error(`Global ${type || 'variable'} does not exist: ${name}`);
+    return variable;
+  }
+
+  getVariable (name) {
+    return this._lookupVariable(name, '').value;
+  }
+
+  setVariable(name, value) {
+    if (!isValidVariableValue(value)) {
+      throw new Error('Invalid variable value');
+    }
+    this._lookupVariable(name, '').value = value;
+  }
+
+  getList(name) {
+    return this._lookupVariable(name, 'list').value;
+  }
+
+  setList(name, value) {
+    if (!isValidListValue(value)) {
+      throw new Error('Invalid list value');
+    }
+    this._lookupVariable(name, 'list').value = value;
   }
 }
 

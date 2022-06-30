@@ -7,6 +7,7 @@ const allMessages = {
   en: () => englishMessages,
   // Generated code:
   /*===*/
+  "ca": () => require("./ca.json"),
   "cs": () => require("./cs.json"),
   "de": () => require("./de.json"),
   "es": () => require("./es.json"),
@@ -14,8 +15,11 @@ const allMessages = {
   "it": () => require("./it.json"),
   "ja": () => require("./ja.json"),
   "ko": () => require("./ko.json"),
+  "lt": () => require("./lt.json"),
+  "nl": () => require("./nl.json"),
   "pl": () => require("./pl.json"),
   "pt": () => require("./pt.json"),
+  "pt-br": () => require("./pt-br.json"),
   "ru": () => require("./ru.json"),
   "sl": () => require("./sl.json"),
   "tr": () => require("./tr.json"),

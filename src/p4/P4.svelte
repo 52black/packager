@@ -8,10 +8,10 @@
   import SelectTheme from './SelectTheme.svelte';
   import Progress from './Progress.svelte';
   import Modals from './Modals.svelte';
-  import {progress, theme} from './stores';
-  import {isSupported, isSafari, isStandalone} from './environment';
-  import version from '../build/version-loader!';
-  import {LONG_NAME, FEEDBACK_PRIMARY, FEEDBACK_SECONDARY, SOURCE_CODE, WEBSITE} from '../packager/brand';
+  import News from './News.svelte';
+  import {progress, theme, error} from './stores';
+  import {isSupported, isSafari, isStandalone, version} from './environment';
+  import {APP_NAME, FEEDBACK_PRIMARY, FEEDBACK_SECONDARY, ACCENT_COLOR, SOURCE_CODE, WEBSITE, DONATE} from '../packager/brand';
 
   let projectData;
 
@@ -26,13 +26,17 @@
 
   let modalVisible = false;
 
+  const defaultTitle = document.title;
   let title = '';
-  $: document.title = projectData && title ? `${title} - ${LONG_NAME}` : LONG_NAME;
+  $: document.title = projectData && title ? `${title} - ${APP_NAME}` : defaultTitle;
 
   const getPackagerOptionsComponent = () => import(
     /* webpackChunkName: "packager-options-ui" */
     './PackagerOptions.svelte'
-  );
+  ).catch((err) => {
+    $error = err;
+  });
+
   // We know for sure we will need this component very soon, so start loading it immediately.
   getPackagerOptionsComponent();
 </script>
@@ -101,19 +105,31 @@
   footer > div {
     margin-top: 12px;
   }
-  .footer-spacer {
-    margin: 0 3px;
+  .disclaimer {
+    font-style: italic;
+  }
+  .version {
+    font-size: small;
+    opacity: 0.8;
+  }
+  .version a {
+    color: inherit;
   }
 </style>
 
 <Modals bind:modalVisible={modalVisible} />
 
 <main aria-hidden={modalVisible} class:is-not-safari={!isSafari}>
-  <Section accent="#ff4c4c">
+  <Section accent={ACCENT_COLOR}>
     <div>
-      <h1>{LONG_NAME}</h1>
+      <h1>{APP_NAME}</h1>
       {#if version}
-        <p><i>{version}</i> - <a href={WEBSITE}>Online version</a></p>
+        <p class="version">
+          {version}
+          {#if isStandalone}
+            - <a href={WEBSITE}>{WEBSITE}</a>
+          {/if}
+        </p>
       {/if}
       <p>{$_('p4.description1')}</p>
       <p>
@@ -143,22 +159,29 @@
           }}
         />
       </p>
+      <p class="disclaimer">
+        {$_('p4.disclaimer')}
+      </p>
     </div>
   </Section>
+
+  {#if !isStandalone}
+    <News />
+  {/if}
 
   {#if isSupported}
     <SelectProject bind:projectData />
   {:else}
     <Section accent="#4C97FF">
-      <h2>Browser not supported</h2>
-      <p>Please update your browser to use this site.</p>
+      <h2>{$_('p4.browserNotSupported')}</h2>
+      <p>{$_('p4.browserNotSupportedDescription')}</p>
     </Section>
   {/if}
 
   {#if projectData}
     {#await getPackagerOptionsComponent()}
       <Section center>
-        <Progress text="Loading interface..." />
+        <Progress text={$_('p4.importingInterface')} />
       </Section>
     {:then { default: PackagerOptions }}
       <div in:fade>
@@ -169,7 +192,9 @@
       </div>
     {:catch}
       <Section center>
-        Something went wrong, please refresh and try again.
+        <p>
+          {$_('p4.unknownImportError')}
+        </p>
       </Section>
     {/await}
   {/if}
@@ -184,11 +209,17 @@
     <div>
       {#if !isStandalone}
         <a href="privacy.html">{$_('p4.privacy')}</a>
-        <span class="footer-spacer">-</span>
+        <span> - </span>
       {/if}
       <a href={FEEDBACK_PRIMARY.link}>{$_('p4.feedback')}</a>
-      <span class="footer-spacer">-</span>
-      <a href={SOURCE_CODE}>{$_('p4.sourceCode')}</a>
+      {#if SOURCE_CODE}
+        <span> - </span>
+        <a href={SOURCE_CODE}>{$_('p4.sourceCode')}</a>
+      {/if}
+      {#if DONATE}
+        <span> - </span>
+        <a href={DONATE}>{$_('p4.donate')}</a>
+      {/if}
     </div>
     <div>
       <a href="https://docs.turbowarp.org/packager">{$_('p4.documentation')}</a>

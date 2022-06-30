@@ -1,7 +1,7 @@
 import JSZip from 'jszip';
-import fetch from 'cross-fetch';
 import {EventTarget, CustomEvent} from '../common/event-target';
 import optimizeSb3Json from './minify/sb3';
+import fetchAsArrayBuffer from './safer-fetch';
 
 const ASSET_HOST = 'https://assets.scratch.mit.edu/internalapi/asset/$path/get/';
 
@@ -135,8 +135,7 @@ const loadScratch2 = (projectData, progressTarget) => {
     progressTarget.dispatchEvent(new CustomEvent('asset-fetch', {
       detail: md5ext
     }));
-    return fetch(ASSET_HOST.replace('$path', md5ext))
-      .then((res) => res.arrayBuffer())
+    return fetchAsArrayBuffer(ASSET_HOST.replace('$path', md5ext))
       .then((arrayBuffer) => {
         const path = `${id}.${getExtension(md5ext)}`;
         zip.file(path, arrayBuffer);
@@ -196,8 +195,7 @@ const loadScratch3 = (projectData, progressTarget) => {
     progressTarget.dispatchEvent(new CustomEvent('asset-fetch', {
       detail: path
     }));
-    return fetch(ASSET_HOST.replace('$path', path))
-      .then((request) => request.arrayBuffer())
+    return fetchAsArrayBuffer(ASSET_HOST.replace('$path', path))
       .then((buffer) => {
         zip.file(path, buffer);
         progressTarget.dispatchEvent(new CustomEvent('asset-fetched', {

@@ -100,7 +100,7 @@ class Monitor {
     this.x = monitor.get('x');
     this.y = monitor.get('y');
     this.visible = monitor.get('visible');
-    this.root.style.transform = `translate(${this.x}px, ${this.y}px)`;
+    this.root.style.transform = `translate(${Math.round(this.x)}px, ${Math.round(this.y)}px)`;
     this.root.style.display = this.visible ? '' : 'none';
   }
 }
@@ -334,6 +334,7 @@ class Row {
   setIndex (index) {
     if (this.index !== index) {
       this.index = index;
+      this.root.dataset.index = index;
       this.root.style.transform = `translateY(${index * ROW_HEIGHT}px)`;
       this.indexEl.textContent = index + 1;
     }
@@ -528,8 +529,24 @@ class ListMonitor extends Monitor {
     row.setIndex(index);
     row.setValue(this.value[index]);
     this.rows.set(index, row);
-    // Order in DOM does not matter
-    this.rowsInner.appendChild(row.root);
+
+    let foundPlaceInDOM = false;
+    for (const root of this.rowsInner.children) {
+      const otherIndexString = root.dataset.index;
+      if (!otherIndexString) {
+        continue;
+      }
+      const otherIndexNumber = +otherIndexString;
+      if (otherIndexNumber > index) {
+        this.rowsInner.insertBefore(row.root, root);
+        foundPlaceInDOM = true;
+        break;
+      }
+    }
+    if (!foundPlaceInDOM) {
+      this.rowsInner.appendChild(row.root);
+    }
+
     return row;
   }
 

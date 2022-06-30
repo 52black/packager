@@ -1,4 +1,4 @@
-const run = (scaffolding) => {
+const run = ({ scaffolding }) => {
   const canvas = scaffolding._canvas;
   const vm = scaffolding.vm;
   const mouse = vm.runtime.ioDevices.mouse;
@@ -10,9 +10,9 @@ const run = (scaffolding) => {
     const x = mouse._clientX + movementX;
     const y = mouse._clientY - movementY;
     mouse._clientX = x;
-    mouse._scratchX = Math.round(mouse.runtime.stageWidth * ((x / width) - 0.5));
+    mouse._scratchX = mouse.runtime.stageWidth * ((x / width) - 0.5);
     mouse._clientY = y;
-    mouse._scratchY = Math.round(mouse.runtime.stageWidth * ((y / height) - 0.5));
+    mouse._scratchY = mouse.runtime.stageWidth * ((y / height) - 0.5);
     if (typeof isDown === 'boolean') {
       const data = {
         button: e.button,
@@ -58,6 +58,14 @@ const run = (scaffolding) => {
   document.addEventListener('pointerlockerror', (e) => {
     console.error('Pointer lock error', e);
   });
+
+  vm.pointerLockMove = (deltaX, deltaY) => {
+    postMouseData({
+      // Essentially constructing a fake MouseEvent
+      movementX: deltaX,
+      movementY: deltaY
+    });
+  };
 
   const oldStep = vm.runtime._step;
   vm.runtime._step = function (...args) {

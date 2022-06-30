@@ -15,6 +15,21 @@ const base = {
 const dist = path.resolve(__dirname, 'dist');
 const buildId = isProduction ? require('./src/build/generate-scaffolding-build-id') : null;
 
+const getVersion = () => {
+  if (process.env.VERSION) {
+    return process.env.VERSION;
+  }
+  if (isStandalone) {
+    const now = new Date();
+    const dateString = `${now.getFullYear()}-${(now.getMonth() + 1).toString().padStart(2, '0')}-${now.getDate().toString().padStart(2, '0')}`;
+    const packageJSON = require('./package.json');
+    const version = packageJSON.version;
+    return `Standalone v${version} (${dateString})`;
+  }
+  return null;
+};
+const version = getVersion();
+
 const makeScaffolding = ({full}) => ({
   ...base,
   devtool: isProduction ? '' : 'source-map',
@@ -23,7 +38,7 @@ const makeScaffolding = ({full}) => ({
     path: dist
   },
   entry: full ? {
-    scaffolding: './src/scaffolding/export.js',
+    'scaffolding-full': './src/scaffolding/export.js',
     addons: './src/addons/index.js'
   } : {
     'scaffolding-min': './src/scaffolding/export.js'
@@ -72,15 +87,27 @@ const makeScaffolding = ({full}) => ({
       }]),
       {
         test: /\.css$/i,
-        use: ['style-loader', {
-          loader: 'css-loader',
-          options: {
-            modules: {
-              localIdentName: 'sc-[local]',
-              exportLocalsConvention: 'camelCase',
-            },
+        use: [
+          {
+            loader: 'style-loader',
+            options: {
+              // This function is stringified and run in a web environment
+              insert: (styleElement) => {
+                var el = document.head || document.body || document.documentElement;
+                el.insertBefore(styleElement, el.firstChild);
+              }
+            }
+          },
+          {
+            loader: 'css-loader',
+            options: {
+              modules: {
+                localIdentName: 'sc-[local]',
+                exportLocalsConvention: 'camelCase',
+              },
+            }
           }
-        }],
+        ],
       }
     ]
   },
@@ -90,7 +117,7 @@ const makeScaffolding = ({full}) => ({
   },
   plugins: [
     ...(buildId ? [new AddBuildIDToOutputPlugin(buildId)] : []),
-    ...(process.env.BUNDLE_ANALYZER === (full ? 'scaffolding' : 'scaffolding-min') ? [new BundleAnalyzerPlugin()] : [])
+    ...(process.env.BUNDLE_ANALYZER === (full ? 'scaffolding-full' : 'scaffolding-min') ? [new BundleAnalyzerPlugin()] : [])
   ]
 });
 
@@ -155,6 +182,7 @@ const makeWebsite = () => ({
     new webpack.DefinePlugin({
       'process.env.ENABLE_SERVICE_WORKER': JSON.stringify(process.env.ENABLE_SERVICE_WORKER),
       'process.env.STANDALONE': JSON.stringify(isStandalone ? true : false),
+      'process.env.VERSION': JSON.stringify(version),
       'process.env.PLAUSIBLE_API': JSON.stringify(process.env.PLAUSIBLE_API),
       'process.env.PLAUSIBLE_DOMAIN': JSON.stringify(process.env.PLAUSIBLE_DOMAIN),
     }),

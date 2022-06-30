@@ -139,9 +139,13 @@
 }
 .monitor-slider {
   margin: 0;
+  width: 100%;
 }
 .monitor-value {
   min-width: 40px;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   text-align: center;
   color: white;
   margin: 0 5px;

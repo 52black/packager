@@ -1,10 +1,11 @@
 <script>
   import Section from './Section.svelte';
   import Button from './Button.svelte';
-  import {UserError} from './errors';
+  import {CannotAccessProjectError, OutdatedPackagerError, UnknownNetworkError, UserError} from '../common/errors';
   import {error} from './stores';
   import {FEEDBACK_PRIMARY} from '../packager/brand';
   import {_} from '../locales/';
+  import ComplexMessage from './ComplexMessage.svelte';
 
   export let modalVisible;
   let modalElement;
@@ -52,6 +53,8 @@
       closeModal();
     }
   };
+
+  const refresh = () => location.reload();
 </script>
 
 <style>
@@ -64,11 +67,15 @@
     left: 0;
     width: 100%;
     height: 100%;
+    z-index: 20;
     display: flex;
     align-items: center;
     justify-content: center;
     background-color: rgba(0, 0, 0, 0.75);
     word-break: break-word;
+  }
+  .technical {
+    font-style: italic;
   }
 </style>
 
@@ -83,10 +90,56 @@
         <p>
           <Button on:click={closeModal} text={$_('p4.close')} />
         </p>
-      {:else}
+      {:else if $error instanceof UnknownNetworkError}
         <p>
-          {$_('p4.errorMessage').replace('{error}', $error)}
+          <ComplexMessage
+            message={$_('p4.networkError')}
+            values={{
+              url: {
+                text: $error.url,
+                href: $error.url,
+                newTab: true
+              }
+            }}
+          />
         </p>
+        <p>
+          <Button on:click={closeModal} text={$_('p4.close')} />
+        </p>
+      {:else if $error instanceof OutdatedPackagerError}
+        <p>{$_('p4.outdated')}</p>
+        <p class="technical">{$error}</p>
+        <p>
+          <Button on:click={refresh} text={$_('p4.refresh')} />
+          <Button secondary on:click={closeModal} text={$_('p4.close')} />
+        </p>
+      {:else if $error instanceof CannotAccessProjectError}
+        <p>
+          {$_('p4.cannotAccessProject')}
+        </p>
+        <p>
+          {$_('select.unsharedProjects')}
+        </p>
+        <p>
+          <ComplexMessage
+            message={$_('select.unsharedProjectsMore')}
+            values={{
+              link: {
+                text: 'https://docs.turbowarp.org/unshared-projects',
+                href: 'https://docs.turbowarp.org/unshared-projects',
+                newTab: true
+              }
+            }}
+          />
+        </p>
+        <p>
+          {$_('p4.cannotAccessProjectCaching')}
+        </p>
+        <p>
+          <Button on:click={closeModal} text={$_('p4.close')} />
+        </p>
+      {:else}
+        <p>{$_('p4.errorMessage').replace('{error}', $error)}</p>
         <p>
           <Button on:click={closeModal} text={$_('p4.close')} />
           <a href={FEEDBACK_PRIMARY.link}>{$_('p4.reportBug')}</a>

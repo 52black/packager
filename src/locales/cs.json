@@ -4,6 +4,9 @@
         "select": "Vyberte nebo přetáhněte soubor",
         "selected": "Vybrán {file}"
     },
+    "import": {
+        "cancel": "Storno"
+    },
     "options": {
         "accentColor": "Dekorační barva (aktivní/podržené řízení, zeptání, kontextové menu)",
         "advancedOptions": "Pokročilé nastavení",
@@ -30,7 +33,6 @@
         "customCursor": "Vlastní kurzor",
         "customExtensions": "Vlastní rozšíření (jeden odkaz na řádek)",
         "customJS": "Vlastní JS (Neměňte, pokud nevíte co děláte!)",
-        "download": "Stáhnout {filename} ({size}MB)",
         "downloadsWillAppearHere": "Stažené soubory se ukážou zde",
         "enableCompiler": "Aktivovat kompilátor",
         "environment": "Prostředí",
@@ -86,17 +88,12 @@
         "error": "Chyba",
         "errorMessage": "Zpráva: {error}",
         "feedback": "Zpětná vazba",
-        "fosshost": "Hostování souborů poskytuje Fosshost",
         "privacy": "Zásady ochrany osobních údajů",
         "reportBug": "Nahlásit chybu",
         "sourceCode": "Zdrojový kód"
     },
     "progress": {
         "compressingProject": "Komprimuji projekt",
-        "loadingAssets": "Načítání souborů ({complete}/{total})",
-        "loadingLargeAsset": "Načítám {thing}",
-        "loadingProjectData": "Načítám data projektu",
-        "loadingScripts": "Načítám skripty",
         "packagingProject": "Balím projekt"
     },
     "reset": {

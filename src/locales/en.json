@@ -12,6 +12,9 @@
     "description3": {
       "string": "Report bugs, give feedback, and suggest ideas {onScratch} or {onGitHub}."
     },
+    "disclaimer": {
+      "string": "This site is not affiliated with Scratch, the Scratch Team, or the Scratch Foundation."
+    },
     "description3-on": {
       "string": "on {brand}",
       "context": "Used in the context 'Report bugs on Scratch'."
@@ -22,8 +25,44 @@
     "errorMessage": {
       "string": "Message: {error}"
     },
+    "networkError": {
+      "string": "Couldn't download {url}. Make sure you're connected to the internet and try disabling any browser extensions.",
+      "context": "Error displayed when an attempt to download a file failed for an unknown reason."
+    },
+    "outdated": {
+      "string": "This version of the packager appears to be outdated. Please refresh and try again.",
+      "context": "Error displayed when the packager detects that you are using an old version and that you must refresh to continue."
+    },
+    "cannotAccessProject": {
+      "string": "Can't access project metadata. This probably means the project is unshared, never existed, or the ID is invalid.",
+      "context": "Part of the error modal when loading an unshared project."
+    },
+    "cannotAccessProjectCaching": {
+      "string": "If the project was shared recently, it may take up to an hour for this message to go away.",
+      "context": "Part of the error modal when loading an unshared project."
+    },
     "close": {
       "string": "Close"
+    },
+    "refresh": {
+      "string": "Refresh",
+      "context": "Button in some error messages that refreshes/reloads the page"
+    },
+    "browserNotSupported": {
+      "string": "Browser not supported",
+      "description": "Message that appears when the user's browser does not support required features."
+    },
+    "browserNotSupportedDescription": {
+      "string": "Please update your browser.",
+      "description": "Additional text that appears when the user's browser does not support required features."
+    },
+    "importingInterface": {
+      "string": "Loading options...",
+      "description": "Can appear when downloading additional UI scripts. Typically never seen."
+    },
+    "unknownImportError": {
+      "string": "Something went wrong. Please refresh and try again.",
+      "description": "Appears when an unknown error happens while downloading additional UI scripts."
     },
     "reportBug": {
       "string": "Report Bug"
@@ -37,33 +76,42 @@
     "sourceCode": {
       "string": "Source Code"
     },
+    "donate": {
+      "string": "Donate",
+      "context": "Link to donation page"
+    },
     "documentation": {
       "string": "Additional resources and help",
       "context": "Link to a place with additional information describing advanced topics"
     },
     "fosshost": {
-      "string": "File hosting provided by Fosshost"
+      "string": "Thank you to Fosshost for providing servers used by the packager",
+      "context": "Link in the site's footer thanking Fosshost.org"
     }
   },
   "progress": {
     "loadingAssets": {
-      "string": "Loading assets ({complete}/{total})"
+      "string": "Downloading assets ({complete}/{total})"
     },
     "compressingProject": {
       "string": "Compressing project"
     },
+    "loadingProjectMetadata": {
+      "string": "Downloading project metadata"
+    },
     "loadingProjectData": {
-      "string": "Loading project data"
+      "string": "Downloading project data"
     },
     "packagingProject": {
       "string": "Packaging project"
     },
     "loadingLargeAsset": {
-      "string": "Loading {thing}",
+      "string": "Downloading {thing}",
       "context": "Generic loading message used when loading a 'brand name' file such as NW.js or Electron."
     },
     "loadingScripts": {
-      "string": "Loading scripts"
+      "string": "Downloading scripts",
+      "context": "Loading message used when loading the Scratch runtime"
     }
   },
   "select": {
@@ -103,6 +151,22 @@
     "noFileSelected": {
       "string": "No file selected",
       "context": "Error message"
+    },
+    "unsharedProjects": {
+      "string": "Unshared projects are no longer accessible using their project ID due to Scratch API changes.",
+      "context": "Warning message about unshared projects no longer being accessible."
+    },
+    "unsharedProjectsTemporary": {
+      "string": "Unshared projects will no longer be accessible using just their project ID at some point in the future due to upcoming Scratch API changes.",
+      "context": "Temporary warning message about unshared projects not being accessible in the FUTURE. Will be replaced with similar message after the changes are implemented."
+    },
+    "unsharedProjectsWorkaround": {
+      "string": "Instead, you can either share the project or save the project to your computer (File > Save to your computer) and load the file in the packager. Files generated by the packager are fully self contained and not affected by these changes.",
+      "context": "Suggested alternatives to continue accessing unshared projects."
+    },
+    "unsharedProjectsMore": {
+      "string": "For more information, visit: {link}",
+      "context": "Link to learn more about the state of unshared projects."
     }
   },
   "options": {
@@ -156,6 +220,14 @@
     },
     "username": {
       "string": "Username (each \"#\" gets replaced with a random number)"
+    },
+    "customUsernameWarning": {
+      "string": "Be careful when changing the default username as it can cause connections to the default cloud variable server to be blocked. Only the default username is guaranteed to work.",
+      "context": "Warning that appears when using custom username and cloud variables at the same time."
+    },
+    "closeWhenStopped": {
+      "string": "Close window when project stops",
+      "context": "Option to close the window containing the packaged project when all the scripts within a project have stopped running."
     },
     "autoplay": {
       "string": "Start project automatically instead of showing a big green flag"
@@ -235,6 +307,10 @@
     "editableLists": {
       "string": "Editable lists"
     },
+    "variableColor": {
+      "string": "Variable color",
+      "context": "Name of option that controls the color of variable monitors that appear over the stage"
+    },
     "interaction": {
       "string": "Input",
       "context": "Input settings header"
@@ -247,6 +323,14 @@
     },
     "customCursor": {
       "string": "Custom cursor"
+    },
+    "cursorCenter": {
+      "string": "Cursor center:",
+      "context": "Option to configure the center of a custom cursor. Followed by 'X: (input) Y: (input)'"
+    },
+    "automaticallyCenter": {
+      "string": "Automatically center",
+      "context": "Button that automatically centers a custom cursor"
     },
     "cursorHelp": {
       "string": "Images up to 32x32 work best. Larger images may not work reliably."
@@ -314,6 +398,16 @@
     "specialCloudBehaviors": {
       "string": "Special cloud variable behaviors like HTMLifier",
       "context": "Do not translate 'HTMLifier'"
+    },
+    "unsafeCloudBehaviors": {
+      "string": "Additional unsafe special cloud behaviors"
+    },
+    "unsafeCloudBehaviorsWarning": {
+      "string": "Unsafe cloud behaviors allows the packaged project to execute arbitrary code outside of the \"sandbox\" that projects are typically executed in. Depending on the environment you're packaging for, this grants projects full control over your computer, including the ability to install viruses. If you do not trust the project you're packaging, please turn off this option.",
+      "context": "Warning that appears when unsafe cloud behaviors is enabled."
+    },
+    "implicitCloudHint": {
+      "string": "Tip: Any variable with a name starting with \"{cloud}\" will be converted to a cloud variable regardless of whether it was marked as one."
     },
     "enableCompiler": {
       "string": "Enable Compiler"
@@ -384,6 +478,23 @@
     "packageNameHelp": {
       "string": "Package name should be a unique name used only by your application. The same project should always have the same package name."
     },
+    "version": {
+      "string": "Version",
+      "context": "Label for application version number input"
+    },
+    "versionHelp": {
+      "string": "Updating the version is completely optional and doesn't affect your project's behavior. It may appear in places like about screens depending on the environment.",
+      "context": "Additional information about the version number option"
+    },
+    "startWindow": {
+      "string": "Start as window"
+    },
+    "startMaximized": {
+      "string": "Start as maximized window"
+    },
+    "startFullscreen": {
+      "string": "Start in fullscreen"
+    },
     "package": {
       "string": "Package",
       "context": "Button to package the project"
@@ -392,12 +503,23 @@
       "string": "Preview",
       "context": "Button to preview the project"
     },
-    "download": {
-      "string": "Download {filename} ({size}MB)",
-      "context": "Download link"
+    "resetAll": {
+      "string": "Reset All",
+      "context": "Button that resets all settings"
     },
     "downloadsWillAppearHere": {
-      "string": "Downloads will appear here"
+      "string": "Downloads will appear here",
+      "context": "Placeholder that appears when no project has been packaged yet so there is nothing to download"
+    }
+  },
+  "downloads": {
+    "link": {
+      "string": "Download {filename} ({size})",
+      "context": "Link to download project after it has been packaged. filename might be \"Packaged Project.html\" and size might be \"6.2MB\""
+    },
+    "useWorkaround": {
+      "string": "Click here if download link doesn't work",
+      "context": "Buttons that appears when downloading certain file types on certain systems to work around system bugs that prevent downloading files."
     }
   },
   "fileInput": {
@@ -434,12 +556,30 @@
     },
     "confirm": {
       "string": "Are you sure you want to reset these settings? This cannot be undone.",
-      "context": "Prompt to confirm user wants to reset settings"
+      "context": "Prompt to confirm user wants to reset a specific subsection's settings"
+    },
+    "confirmAll": {
+      "string": "Are you sure you want to reset ALL settings? This cannot be undone.",
+      "context": "Prompt to confirm user wants to reset ALL settings for the current project"
     }
   },
   "preview": {
     "loading": {
       "string": "Loading Preview"
+    }
+  },
+  "import": {
+    "header": {
+      "string": "Importing project...",
+      "description": "Header that appears when importing a project from an external site"
+    },
+    "description": {
+      "string": "This may take a while if the project is large.",
+      "description": "Appears when importing a project from an external site"
+    },
+    "cancel": {
+      "string": "Cancel",
+      "description": "Button to cancel import"
     }
   }
 }

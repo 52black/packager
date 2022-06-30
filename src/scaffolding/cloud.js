@@ -80,7 +80,7 @@ class CloudManager {
 
 class WebSocketProvider {
   /**
-   * @param {string[]|string} cloudHost URLs of servers to connect to, including ws:// or wss://
+   * @param {string[]|string} cloudHost URLs of servers to connect to. Must start with ws: or wss:
    * If cloudHost is an array, the server will consecutively try each server until one connects.
    * @param {string} projectId The ID of the project
    */
@@ -88,21 +88,35 @@ class WebSocketProvider {
     this.cloudHosts = Array.isArray(cloudHost) ? cloudHost : [cloudHost];
     this.projectId = projectId;
     this.attemptedConnections = 0;
-    this.messageQueue = [];
-    this.throttleTimeout = null;
+    this.bufferedMessages = [];
+    this.scheduledBufferedSend = null;
+    this.reconnectTimeout = null;
     this.openConnection = this.openConnection.bind(this);
-    this._throttleTimeoutFinished = this._throttleTimeoutFinished.bind(this);
+    this._scheduledSendBufferedMessages = this._scheduledSendBufferedMessages.bind(this);
   }
 
   enable () {
     this.openConnection();
   }
 
+  setProjectId (id) {
+    this.projectId = id;
+    this.closeAndReconnect();
+  }
+
   openConnection () {
     this.currentCloudHost = this.cloudHosts[this.attemptedConnections % this.cloudHosts.length];
     this.attemptedConnections++;
-    console.log(`Connecting to ${this.currentCloudHost}`);
-    this.ws = new WebSocket(this.currentCloudHost);
+    console.log(`Connecting to ${this.currentCloudHost} with ID ${this.projectId}, username ${this.manager.getUsername()}`);
+    try {
+      // Don't try to validate the cloud host ourselves. Let the browser do it.
+      // Edge cases like ws://localhost being considered secure are too complex to handle correctly.
+      this.ws = new WebSocket(this.currentCloudHost);
+    } catch (e) {
+      console.error(e);
+      // The error message from the browser (especially Firefox) is sometimes very generic and not helpful.
+      throw new Error(`Cloud host ${this.currentCloudHost} is invalid: ${e}`);
+    }
     this.ws.onerror = this.onerror.bind(this);
     this.ws.onmessage = this.onmessage.bind(this);
     this.ws.onopen = this.onopen.bind(this);
@@ -129,6 +143,7 @@ class WebSocketProvider {
     this.writeToServer({
       method: 'handshake'
     });
+    this.sendBufferedMessages();
     console.log('WebSocket connected');
   }
 
@@ -144,37 +159,50 @@ class WebSocketProvider {
     }
     const timeout = Math.random() * (Math.pow(2, Math.min(this.attemptedConnections + 1, 5)) - 1) * 1000;
     console.log(`Connection lost; reconnecting in ${Math.round(timeout)}ms`);
-    setTimeout(this.openConnection, timeout);
+    this.reconnectTimeout = setTimeout(this.openConnection, timeout);
+  }
+
+  closeAndReconnect () {
+    console.log('Closing connection and reconnecting.');
+    if (this.ws) {
+      this.ws.onclose = null;
+      this.ws.onerror = null;
+      this.ws.close();
+    }
+    clearTimeout(this.reconnectTimeout);
+    // There should be a slight delay so that repeated project ID changes won't trigger too many connections.
+    const delay = 1000 / 30;
+    this.reconnectTimeout = setTimeout(this.openConnection, delay);
   }
 
   canWriteToServer () {
-    return this.ws && this.ws.readyState === WebSocket.OPEN && this.throttleTimeout === null;
+    return this.ws && this.ws.readyState === WebSocket.OPEN;
   }
 
-  _scheduleThrottledSend () {
-    if (this.throttleTimeout === null) {
-      this.throttleTimeout = setTimeout(this._throttleTimeoutFinished, 1000 / 30);
+  scheduleBufferedSend () {
+    if (!this.scheduledBufferedSend) {
+      this.scheduledBufferedSend = true;
+      Promise.resolve().then(this._scheduledSendBufferedMessages);
     }
   }
 
-  _throttleTimeoutFinished () {
-    this.throttleTimeout = null;
-    if (this.messageQueue.length === 0) {
-      return;
-    }
+  _scheduledSendBufferedMessages () {
+    this.scheduledBufferedSend = false;
     if (this.canWriteToServer()) {
-      this.writeToServer(this.messageQueue.shift());
+      this.sendBufferedMessages();
     }
-    this._scheduleThrottledSend();
   }
 
-  throttledWriteToServer (message) {
-    if (this.canWriteToServer()) {
+  sendBufferedMessages () {
+    for (const message of this.bufferedMessages) {
       this.writeToServer(message);
-    } else {
-      this.messageQueue.push(message);
     }
-    this._scheduleThrottledSend();
+    this.bufferedMessages.length = 0;
+  }
+
+  bufferedWriteToServer (message) {
+    this.bufferedMessages.push(message);
+    this.scheduleBufferedSend();
   }
 
   writeToServer (message) {
@@ -184,14 +212,14 @@ class WebSocketProvider {
   }
 
   handleUpdateVariable (name, value) {
-    // If this variable already has a scheduled update, we'll replace its value instead of scheduling another update.
-    for (const i of this.messageQueue) {
+    // If this variable already has an update queued, we'll replace its value instead of adding another update.
+    for (const i of this.bufferedMessages) {
       if (i.name === name) {
         i.value = value;
         return;
       }
     }
-    this.throttledWriteToServer({
+    this.bufferedWriteToServer({
       method: 'set',
       name,
       value

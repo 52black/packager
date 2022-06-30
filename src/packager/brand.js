@@ -8,37 +8,41 @@ These values control branding strings throughout the entire app. If you're forki
 
 APP_NAME is the name of the app. This text is included in packaged projects.
 
-LONG_NAME a longer form of the app's name. Used by the website. Can just be the same as APP_NAME
-
 WEBSITE is your app's website. This link is included in packaged projects.
 
 COPYRIGHT_NOTICE is A copyright notice regarding the app. This text is included in packaged projects.
 Also make sure to update the "License" section in README.md
 
-SOURCE_CODE is where users can find the app's source code. This link is included in the website.
-Note that due to the license used by the project (see README.md), you may be required to make the source code available to all visitors.
+ACCENT_COLOR is a color used in various parts of the interface and as the default value for the accent
+color option. It should be a 6-character hex color (#123abc)
+
+SOURCE_CODE is where users can find the app's source code. This link is included in the website's footer.
+If this is set to an empty string, the link is removed.
 
 FEEDBACK_PRIMARY and FEEDBACK_SECONDARY are feedback/bug report links shown in various places throughout the website.
 name is how they will be labelled in the interface and link is of course a URL
+
+DONATE is a link that people can visit to donate.
+If this is set to an empty string, the link is removed.
 */
 
 module.exports = {
   APP_NAME: 'TurboWarp Packager',
-  LONG_NAME: 'TurboWarp Packager for Scratch',
   WEBSITE: 'https://packager.turbowarp.org/',
-  COPYRIGHT_NOTICE: `Copyright (C) 2021 Thomas Weber
+  COPYRIGHT_NOTICE: `Copyright (C) 2021-2022 Thomas Weber
 
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License version 3
-as published by the Free Software Foundation.
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
 
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU Lesser General Public License for more details.
+    http://www.apache.org/licenses/LICENSE-2.0
 
-You should have received a copy of the GNU Lesser General Public License
-along with this program. If not, see <https://www.gnu.org/licenses/>.`,
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.`,
+  ACCENT_COLOR: '#ff4c4c',
   SOURCE_CODE: 'https://github.com/TurboWarp/packager',
   FEEDBACK_PRIMARY: {
     name: 'Scratch',
@@ -47,5 +51,6 @@ along with this program. If not, see <https://www.gnu.org/licenses/>.`,
   FEEDBACK_SECONDARY: {
     name: 'GitHub',
     link: 'https://github.com/TurboWarp/packager/issues'
-  }
+  },
+  DONATE: 'https://github.com/sponsors/GarboMuffin',
 };

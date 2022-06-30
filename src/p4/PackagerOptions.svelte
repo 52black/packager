@@ -8,14 +8,15 @@
   import CustomExtensions from '../p4/CustomExtensions.svelte';
   import LearnMore from './LearnMore.svelte';
   import ColorPicker from './ColorPicker.svelte';
+  import Downloads from './Downloads.svelte';
   import writablePersistentStore from './persistent-store';
   import fileStore from './file-store';
-  import {progress, currentTask} from './stores';
+  import {progress, currentTask, error} from './stores';
   import Preview from './preview';
   import deepClone from './deep-clone';
-  import Packager from '../packager/packager';
-  import WebAdapter from '../packager/web/adapter';
+  import Packager from '../packager/web/export';
   import Task from './task';
+  import downloadURL from './download-url';
 
   export let projectData;
   export let title;
@@ -74,17 +75,29 @@
     'electron-linux64'
   ].includes($options.target);
 
-  const downloadURL = (filename, url) => {
-    const link = document.createElement('a');
-    link.download = filename;
-    link.href = url;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
+  const automaticallyCenterCursor = () => {
+    const icon = $customCursorIcon;
+    const url = URL.createObjectURL(icon)
+    const image = new Image();
+    const cleanup = () => {
+      image.onerror = null;
+      image.onload = null;
+      URL.revokeObjectURL(url);
+    };
+    image.onload = () => {
+      $options.cursor.center.x = Math.round(image.width / 2);
+      $options.cursor.center.y = Math.round(image.height / 2);
+      cleanup();
+    };
+    image.onerror = () => {
+      cleanup();
+      $error = new Error('Image could not be loaded');
+      throw $error;
+    };
+    image.src = url;
   };
 
   const runPackager = async (task, options) => {
-    Packager.adapter = new WebAdapter();
     const packager = new Packager();
     packager.options = options;
     packager.project = projectData.project;
@@ -160,6 +173,15 @@
     $options = $options;
   };
 
+  const resetAll = () => {
+    if (confirm($_('reset.confirmAll'))) {
+      resetOptions(Object.keys($options));
+      $icon = null;
+      $customCursorIcon = null;
+      $loadingScreenImage = null;
+    }
+  };
+
   onDestroy(() => {
     if (result) {
       URL.revokeObjectURL(result.url);
@@ -206,9 +228,14 @@
     padding: 10px;
     border-radius: 10px;
   }
-  .small {
-    font-size: small;
-    opacity: 0.8;
+  .buttons {
+    display: flex;
+  }
+  .button {
+    margin-right: 4px;
+  }
+  .reset-button {
+    margin-left: auto;
   }
 </style>
 
@@ -294,6 +321,15 @@
     <label class="option">
       {$_('options.username')}
       <input type="text" class="shorter" bind:value={$options.username}>
+    </label>
+    {#if $options.username !== defaultOptions.username && cloudVariables.length !== 0}
+      <p class="warning">
+        {$_('options.customUsernameWarning')}
+      </p>
+    {/if}
+    <label class="option">
+      <input type="checkbox" bind:checked={$options.closeWhenStopped}>
+      {$_('options.closeWhenStopped')}
     </label>
 
     <h3>{$_('options.stage')}</h3>
@@ -424,6 +460,11 @@
       <input type="checkbox" bind:checked={$options.monitors.editableLists}>
       {$_('options.editableLists')}
     </label>
+    <!-- svelte-ignore a11y-label-has-associated-control -->
+    <label class="option">
+      <ColorPicker bind:value={$options.monitors.variableColor} />
+      {$_('options.variableColor')}
+    </label>
   </div>
 </Section>
 
@@ -457,6 +498,18 @@
       <div in:slide|self class="option">
         <ImageInput bind:file={$customCursorIcon} previewSizes={[[32, 32], [16, 16]]} />
         <p>{$_('options.cursorHelp')}</p>
+        <label class="option">
+          {$_('options.cursorCenter')}
+          <!-- X: and Y: intentionally not translated -->
+          X: <input type="number" min="0" bind:value={$options.cursor.center.x}>
+          Y: <input type="number" min="0" bind:value={$options.cursor.center.y}>
+          <button
+            on:click={automaticallyCenterCursor}
+            disabled={!$customCursorIcon}
+          >
+            {$_('options.automaticallyCenter')}
+          </button>
+        </label>
       </div>
     {/if}
 
@@ -523,15 +576,11 @@
         <div transition:fade|local>
           <label class="option">
             {$_('options.cloudVariablesHost')}
-            <input type="text" bind:value={$options.cloudVariables.cloudHost}>
+            <!-- Examples of valid values: -->
+            <!-- wss://clouddata.turbowarp.org -->
+            <!-- ws:localhost:8080 -->
+            <input type="text" bind:value={$options.cloudVariables.cloudHost} pattern="wss?:.*">
           </label>
-          <!-- TODO: Remove mid January 2021 -->
-          {#if $options.cloudVariables.cloudHost === 'wss://clouddata.turbowarp.org'}
-            <p class="small">
-              Another update: The packager will try to connect to clouddata.turbowarp.org first, and if that fails, it will try clouddata.turbowarp.xyz instead.
-              This should make connections more reliable on filtered internet connections.
-            </p>
-          {/if}
         </div>
       {/if}
 
@@ -547,6 +596,18 @@
         </label>
         <LearnMore slug="packager/special-cloud-behaviors" />
       </div>
+
+      <div class="option">
+        <label>
+          <input type="checkbox" bind:checked={$options.cloudVariables.unsafeCloudBehaviors}>
+          {$_('options.unsafeCloudBehaviors')}
+        </label>
+        <LearnMore slug="packager/special-cloud-behaviors#eval" />
+      </div>
+      {#if $options.cloudVariables.unsafeCloudBehaviors}
+        <p class="warning">{$_('options.unsafeCloudBehaviorsWarning')}</p>
+      {/if}
+      <p>{$_('options.implicitCloudHint').replace('{cloud}', '☁')}</p>
     {:else}
       <p>{$_('options.noCloudVariables')}</p>
     {/if}
@@ -662,6 +723,10 @@
           <input type="radio" name="environment" bind:group={$options.target} value="electron-win64">
           {$_('options.application-win64').replace('{type}', 'Electron')}
         </label>
+        <label class="option">
+          <input type="radio" name="environment" bind:group={$options.target} value="electron-mac">
+          {$_('options.application-mac').replace('{type}', 'Electron')}
+        </label>
       </div>
       <div class="group">
         <label class="option">
@@ -689,10 +754,11 @@
   <div in:fade|local>
     <Section
       accent="#FF661A"
-      reset={$options.target === 'zip' ? null : () => {
+      reset={$options.target.startsWith('zip') ? null : () => {
         resetOptions([
-          'app.packageName'
-        ])
+          'app.packageName',
+          'app.windowMode'
+        ]);
       }}
     >
       <div>
@@ -707,13 +773,36 @@
           </label>
           <p>{$_('options.packageNameHelp')}</p>
 
+          <label class="option">
+            {$_('options.version')}
+            <input type="text" bind:value={$options.app.version} pattern="\d+\.\d+\.\d+" minlength="1">
+          </label>
+          <p>{$_('options.versionHelp')}</p>
+
+          {#if $options.target.includes('electron')}
+            <div class="group">
+              <label class="option">
+                <input type="radio" name="app-window-mode" bind:group={$options.app.windowMode} value="window">
+                {$_('options.startWindow')}
+              </label>
+              <label class="option">
+                <input type="radio" name="app-window-mode" bind:group={$options.app.windowMode} value="maximize">
+                {$_('options.startMaximized')}
+              </label>
+              <label class="option">
+                <input type="radio" name="app-window-mode" bind:group={$options.app.windowMode} value="fullscreen">
+                {$_('options.startFullscreen')}
+              </label>
+            </div>
+          {/if}
+
           <div class="warning">
             <div>Creating native applications for specific platforms is discouraged. In most cases, Plain HTML or Zip will have numerous advantages:</div>
             <ul>
-              <li>Can be run directly from a website</li>
-              <li>Users are less likely to be suspicious of a virus</li>
+              <li>Can be run directly from a website on any platform, even phones</li>
+              <li>Users are significantly less likely to be suspicious of a virus</li>
               <li>Significantly smaller file size</li>
-              <li>The same file will work on almost every platform</li>
+              <li>Can still be downloaded locally and run offline</li>
             </ul>
             <div>If you don't truly need to make a self-contained application for each platform (we understand there are some cases where this is necessary), we recommend you don't.</div>
           </div>
@@ -721,49 +810,63 @@
           {#if $options.target.includes('win')}
             <div>
               <h2>Windows</h2>
+              <p>All Windows applications generated by this site are unsigned, so users will see SmartScreen warnings when they try to run it for the first time. They can bypass these warnings by pressing "More info" then "Run anyways".</p>
               <p>To change the icon of the executable file or create an installer program, download and run <a href="https://github.com/TurboWarp/packager-extras/releases">TurboWarp Packager Extras</a> and select the output of this website.</p>
-              <p>All Windows applications generated by this site are unsigned, so users may see SmartScreen warnings when they try to launch it for the first time.</p>
-              {#if $options.target.includes('nwjs')}
-                <p class="warning">NW.js support is deprecated and may be removed in the future. Use Electron instead if possible.</p>
-              {/if}
-              {#if $options.target.endsWith('64')}
-                <p>The application will only run on 64-bit x86 computers.</p>
-              {:else if $options.target.endsWith('32')}
-                <p>The application will run on 32-bit and 64-bit x86 computers.</p>
-                <p>If large projects tend to crash, use 64-bit only mode instead (in Other environments).</p>
-              {/if}
             </div>
           {:else if $options.target.includes('mac')}
-            <h2>macOS</h2>
-            <p>Due to Apple policy, packaging for their platforms is troublesome. You either have to:</p>
-            <ul>
-              <li>Instruct users to ignore scary Gatekeeper warnings by opening Finder > Navigating to the application > Right click > Open > Open. This website generates applications that require this workaround.</li>
-              <li>Or pay Apple $100/year for a developer account to sign and notarize the app (very involved process; reach out in feedback for more information)</li>
-            </ul>
-            {#if $options.target.includes('webview')}
+            <div>
+              <h2>macOS</h2>
+              <p>Due to Apple policy, packaging for their platforms is troublesome. You either have to:</p>
+              <ul>
+                <li>Instruct users to ignore scary Gatekeeper warnings by opening Finder > Navigating to the application > Right click > Open > Open. This website generates applications that require this workaround.</li>
+                <li>Or pay Apple $100/year for a developer account to sign and notarize the app (very involved process; reach out in feedback for more information)</li>
+              </ul>
+            </div>
+          {:else if $options.target.includes('linux')}
+            <div>
+              <h2>Linux</h2>
+              <p>Linux support is still experimental.</p>
+              <p>Linux support in the packager is limited to 64-bit x86 apps (which will run on most desktops and laptops). 32-bit systems and ARM devices such as Raspberry Pis unfortunately are not supported yet.</p>
+            </div>
+          {/if}
+
+          {#if $options.target.includes('electron')}
+            <div>
+              <h2>Electron</h2>
+              <p>The Electron environment works by embedding a copy of Chromium (the open source part of Google Chrome) along with your project, which means the app will be very large.</p>
+
+              {#if $options.target.includes('mac')}
+                <p>On macOS, the app will run natively on both Intel Silicon and Apple Silicon Macs.</p>
+              {:else if $options.target.includes('linux')}
+                <p>On Linux, the application can be started by running <code>start.sh</code></p>
+              {/if}
+
+              {#if $options.target.includes('32')}
+                <p>Note: You have selected the 32-bit or 64-bit mode. This maximizes device compatibility but limits the amount of memory the app can use. If you encounter crashes, try going into "Other environments" and using the 64-bit only mode instead.</p>
+              {/if}
+            </div>
+          {:else if $options.target.includes('nwjs')}
+            <div>
+              <h2>NW.js</h2>
+              <p class="warning">NW.js support is deprecated and may be removed in the future. Use the Electron environments instead. They're better in every way.</p>
+              <p>The NW.js environment works by embedding a copy of Chromium (the open source part of Google Chrome) along with your project, which means the app will be very large.</p>
+              <p>For further help and steps, see <a href="https://docs.nwjs.io/en/latest/For%20Users/Package%20and%20Distribute/#linux">NW.js Documentation</a>.</p>
+              {#if $options.target.includes('mac')}
+                <p>On macOS, the app will run using Rosetta on Apple Silicon Macs.</p>
+              {/if}
+            </div>
+          {:else if $options.target.includes('webview-mac')}
+            <div>
               <h2>WKWebView</h2>
-              <p>WKWebView is the fastest and smallest way to package for macOS. It should run natively (without Rosetta) on both Intel and Apple silicon Macs running macOS 10.12 or later.</p>
+              <p>WKWebView is the preferred way to package for macOS. It will be hundreds of MB smaller than the other macOS environments and typically run the fastest.</p>
+              <p>The app will run natively on both Intel and Apple silicon Macs running macOS 10.12 or later.</p>
               <p>Note that:</p>
               <ul>
                 <li>Video sensing and loudness blocks will not work</li>
-                <li>Extremely memory intensive projects may not work well</li>
+                <li>Extremely large projects might cause crashes</li>
               </ul>
-              <p>Use "Plain HTML" or "NW.js macOS Application" if these are problems for your project.</p>
-            {:else if $options.target.includes('nwjs')}
-              <h2>NW.js</h2>
-              <p>NW.js runs natively on Intel Macs but will use Rosetta on Apple silicon Macs.</p>
-              <p>For further help and steps, see <a href="https://docs.nwjs.io/en/latest/For%20Users/Package%20and%20Distribute/#mac-os-x">NW.js Documentation</a>.</p>
-            {/if}
-          {:else if $options.target.includes('linux')}
-            <h2>Linux</h2>
-            <p>Linux support is still experimental.</p>
-            <p>The application will only run on 64-bit x86 computers. 32-bit computers, Raspberry Pis, and other ARM devices will not work.</p>
-            {#if $options.target.includes('electron')}
-              <p>The application is started by running <code>start.sh</code>.</p>
-            {:else if $options.target.includes('nwjs')}
-              <p class="warning">NW.js support is deprecated and may be removed in the future. Use Electron instead if possible.</p>
-              <p>For further help and steps, see <a href="https://docs.nwjs.io/en/latest/For%20Users/Package%20and%20Distribute/#linux">NW.js Documentation</a>.</p>
-            {/if}
+              <p>Use "Electron macOS Application" or "Plain HTML" if you encounter these issues.</p>
+            </div>
           {/if}
         {/if}
       </div>
@@ -772,20 +875,25 @@
 {/if}
 
 <Section>
-  <Button on:click={pack} text={$_('options.package')} />
-  <Button on:click={preview} secondary text={$_('options.preview')} />
+  <div class="buttons">
+    <div class="button">
+      <Button on:click={pack} text={$_('options.package')} />
+    </div>
+    <div clas="button">
+      <Button on:click={preview} secondary text={$_('options.preview')} />
+    </div>
+    <div class="reset-button">
+      <Button on:click={resetAll} dangerous text={$_('options.resetAll')} />
+    </div>
+  </div>
 </Section>
 
 {#if result}
-  <Section center>
-    <p>
-      <a href={result.url} download={result.filename}>
-        {$_('options.download')
-          .replace('{filename}', result.filename)
-          .replace('{size}', (result.blob.size / 1000 / 1000).toFixed(2))}
-      </a>
-    </p>
-  </Section>
+  <Downloads
+    name={result ? result.filename : null}
+    url={result ? result.url : null}
+    blob={result ? result.blob : null}
+  />
 {:else if !$progress.visible}
   <Section caption>
     <p>{$_('options.downloadsWillAppearHere')}</p>

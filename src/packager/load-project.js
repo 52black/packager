@@ -2,10 +2,10 @@ import {transfer, proxy} from 'comlink';
 import createDownloadWorker from '../build/p4-worker-loader!./download-project';
 import {readAsArrayBuffer} from '../common/readers';
 import request from '../common/request';
-import {AbortError} from '../p4/errors';
+import {AbortError} from '../common/errors';
 
 const downloadProject = async (buffer, progressCallback) => {
-  const {worker, terminate} = createDownloadWorker();
+  const {worker, terminate} = await createDownloadWorker();
   let terminateAndReject;
   const downloadPromise = new Promise((resolve, reject) => {
     worker.downloadProject(transfer(buffer, [buffer]), proxy(progressCallback))
@@ -39,7 +39,12 @@ const fromURL = async (url, progressCallback) => {
   return downloadProject(buffer, progressCallback);
 };
 
-const fromID = (id, progressCallback) => fromURL(`https://projects.scratch.mit.edu/${id}`, progressCallback);
+const fromID = (id, token, progressCallback) => {
+  const tokenPart = token ? `?token=${token}` : '';
+  // TODO: enable tokens when we're pretty sure nothing will break
+  let url = `https://projects.scratch.mit.edu/${id}`;
+  return fromURL(url, progressCallback);
+};
 
 const fromFile = async (file, progressCallback) => {
   const buffer = await readAsArrayBuffer(file);
