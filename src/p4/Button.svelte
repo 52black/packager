@@ -12,20 +12,7 @@
 </script>
 
 <style>
-  button {
-    position: relative;
-    font-family: inherit;
-    font-size: 14px;
-    color: white;
-    border: none;
-    padding: 0.5rem 1rem;
-    margin: 0;
-    border-radius: 4px;
-    overflow: hidden;
-    cursor: pointer;
-    font-family: inherit;
-    font-weight: bold;
-  }
+  
   .text {
     display: flex;
     align-items: center;
@@ -43,12 +30,9 @@
     height: 100%;
     background-color: rgba(0, 0, 0, 0.25);
   }
-  button:active .dimmer {
-    display: block;
-  }
+  
 </style>
 
-<button on:click style:background-color={getColor()}>
-  <div class="dimmer"></div>
-  <div class="text">{text}</div>
+<button on:click class="mdui-btn mdui-color-pink-accent mdui-ripple">
+  {text}
 </button>

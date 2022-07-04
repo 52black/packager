@@ -17,7 +17,8 @@
     padding: 1em;
     margin-top: 1em;
     margin-bottom: 1em;
-    box-shadow: 0 2px 0.5em 0.1em rgba(0, 0, 0, 0.2);
+    -webkit-box-shadow: 0 7px 8px -4px rgba(0, 0, 0, 0.03), 0 12px 17px 2px rgba(0, 0, 0, 0.021), 0 5px 22px 4px rgba(0, 0, 0, 0.018) !important;
+    box-shadow: 0 7px 8px -4px rgba(0, 0, 0, 0.03), 0 12px 17px 2px rgba(0, 0, 0, 0.021), 0 5px 22px 4px rgba(0, 0, 0, 0.018) !important;
   }
   :global([theme="dark"]) .card {
     background: #222;

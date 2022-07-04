@@ -7,16 +7,31 @@
     <title><%= APP_NAME %> - Convert Scratch projects to HTML, EXE, and more</title>
     <meta name="description" content="Converts Scratch 3, 2, or 1 projects into HTML files, zip archives, or executable programs for Windows, macOS, and Linux.">
     <style>
-      body[p4-splash-theme="dark"]:not([p4-loaded]) {
-        background-color: #111;
-        color-scheme: dark;
+      body{
+        background-color: #eee!important;
+      }
+      html[theme="dark"] > body {
+        background-color: #111 !important;
+        /* color-scheme: dark; */
+      }
+      html[theme="dark"] > .mdui-select-selected {
+        color: #eee;
       }
       .input-for-remembering-project-file {
         display: none;
       }
+     p, h1, h2, h3, .options, .option {
+    font-weight: unset;
+    color:#555!important;
+    font-family: "Arial","Microsoft YaHei","黑体","宋体",sans-serif!important;
+}
+
     </style>
   </head>
   <body>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/mdui/1.0.2/css/mdui.min.css" />
+    <script src="https://cdn.staticfile.org/mdui/1.0.2/js/mdui.min.js"></script>
+
     <noscript>This page requires JavaScript.</noscript>
     <!-- This element needs to exist in the HTML for some browsers to autocomplete it. -->
     <input type="file" class="input-for-remembering-project-file" autocomplete="on">
@@ -24,13 +39,18 @@
     <script>
       (function() {
         var theme = 'system';
+        console.log(1)
         try {
           var local = localStorage.getItem('P4.theme')
           if (typeof local === 'string') theme = local;
         } catch (e) { /* ignore */ }
         if (theme === 'system') theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
         document.body.setAttribute('p4-splash-theme', theme);
+        console.log(theme)
+        // document.body.style='background-color:'+(theme=='dark'?'#111':'#eee')
       })();
     </script>
+    <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+    <script>LA.init({id: "Jjk56nOhS1TeYyAU",ck: "Jjk56nOhS1TeYyAU"})</script>
   </body>
 </html>

@@ -42,6 +42,11 @@
 </script>
 
 <style>
+
+:global(a) {
+    text-decoration: none;
+    color:#FF4081!important;
+}
   :root {
     font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
   }
@@ -122,7 +127,7 @@
 <main aria-hidden={modalVisible} class:is-not-safari={!isSafari}>
   <Section accent={ACCENT_COLOR}>
     <div>
-      <h1>{APP_NAME}</h1>
+      <p style="font-size:2em">{APP_NAME}</p>
       {#if version}
         <p class="version">
           {version}
@@ -134,16 +139,18 @@
       <p>{$_('p4.description1')}</p>
       <p>
         <ComplexMessage
-          message={$_('p4.description2')}
+          message=''
           values={{
             embedding: {
-              text: $_('p4.description2-embedding'),
+              text: '',
               href: 'https://docs.turbowarp.org/embedding'
             }
           }}
         />
       </p>
-      <p>
+      <p>由<a href="//40code.com" target="_blank">40code</a>提供支持</p>
+      <p>此网站不属于 Scratch、Scratch 团队或 Scratch 基金会。</p>
+      <!--<p>
         <ComplexMessage
           message={$_('p4.description3')}
           values={{
@@ -161,7 +168,7 @@
       </p>
       <p class="disclaimer">
         {$_('p4.disclaimer')}
-      </p>
+      </p>-->
     </div>
   </Section>
 
@@ -206,7 +213,7 @@
   {/if}
 
   <footer>
-    <div>
+    <!--<div>
       {#if !isStandalone}
         <a href="privacy.html">{$_('p4.privacy')}</a>
         <span> - </span>
@@ -226,7 +233,7 @@
     </div>
     <div>
       <a href="https://fosshost.org/">{$_('p4.fosshost')}</a>
-    </div>
+    </div>-->
     <div>
       <SelectTheme />
     </div>
